@@ -11,6 +11,9 @@ class Conversation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"Conversation {self.id} ({self.users.count()} users)"
+
 
 class ConversationMessage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -19,3 +22,6 @@ class ConversationMessage(models.Model):
     sent_to = models.ForeignKey(User, related_name='received_messages', on_delete=models.CASCADE)
     created_by = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Message {self.id} in Conversation {self.conversation.id}"

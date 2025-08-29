@@ -14,7 +14,7 @@ def get_user(token_key):
         user_id = token.payload['user_id']
         return User.objects.get(pk=user_id)
     except Exception as e:
-        return AnonymousUser
+        return AnonymousUser()
 
 
 class TokenAuthMiddleware(BaseMiddleware):

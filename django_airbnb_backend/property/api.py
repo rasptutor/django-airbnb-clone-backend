@@ -1,7 +1,9 @@
 from django.http import JsonResponse
 
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework.permissions import IsAuthenticated
 from .forms import PropertyForm
 from .models import Property, Reservation
 from .serializers import PropertiesDetailSerializer, PropertiesListSerializer, ReservationsListSerializer
@@ -37,14 +39,11 @@ def properties_list(request):
     print('country', country)
 
     if checkin_date and checkout_date:
-        exact_matches = Reservation.objects.filter(start_date=checkin_date) | Reservation.objects.filter(end_date=checkout_date)
-        overlap_matches = Reservation.objects.filter(start_date__lte=checkout_date, end_date__gte=checkin_date)
-        all_matches = []
-
-        for reservation in exact_matches | overlap_matches:
-            all_matches.append(reservation.property_id)
-        
-        properties = properties.exclude(id__in=all_matches)
+        overlapping = Reservation.objects.filter(
+            start_date__lte=checkout_date,
+            end_date__gte=checkin_date
+        )
+        properties = properties.exclude(id__in=overlapping.values_list('property_id', flat=True))
 
     if landlord_id:
         properties = properties.filter(landlord_id=landlord_id)
@@ -68,9 +67,9 @@ def properties_list(request):
         properties = properties.filter(category=category)
 
     if user:
-        for property in properties:
-            if user in property.favorited.all():
-                favorites.append(property.id)
+        favorites = list(
+            properties.filter(favorited=user).values_list('id', flat=True)
+        )
                 
     serializer = PropertiesListSerializer(properties, many=True)
 
@@ -83,7 +82,7 @@ def properties_list(request):
 @authentication_classes([])
 @permission_classes([])
 def properties_detail(request, pk):
-    property = Property.objects.get(pk=pk)    
+    property = get_object_or_404(Property, pk=pk)   
 
     serializer = PropertiesDetailSerializer(property, many=False)
 
@@ -101,6 +100,7 @@ def property_reservations(request, pk):
     return JsonResponse(serializer.data, safe=False)
 
 @api_view(['POST', 'FILES'])
+@permission_classes([IsAuthenticated])
 def create_property(request):
     form = PropertyForm(request.POST, request.FILES)
 
@@ -115,6 +115,7 @@ def create_property(request):
         return JsonResponse({'errors': form.errors.as_json()}, status=400)
     
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def book_property(request, pk):
     try:
         start_date = request.POST.get('start_date', '')
@@ -123,10 +124,10 @@ def book_property(request, pk):
         total_price = request.POST.get('total_price', '')
         guests = request.POST.get('guests', '')
 
-        property = Property.objects.get(pk=pk)
+        property_obj = get_object_or_404(Property, pk=pk)
 
         Reservation.objects.create(
-            property=property,
+            property=property_obj,
             start_date=start_date,
             end_date=end_date,
             number_of_nights=number_of_nights,
@@ -142,8 +143,9 @@ def book_property(request, pk):
         return JsonResponse({'success': False})
     
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def toggle_favorite(request, pk):
-    property = Property.objects.get(pk=pk)
+    property = get_object_or_404(Property, pk=pk)
 
     if request.user in property.favorited.all():
         property.favorited.remove(request.user)
